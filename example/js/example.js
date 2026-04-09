@@ -420,19 +420,21 @@ var ViewerFloorplanner = function(blueprint3d) {
     scope.handleWindowResize();
 
     // mode buttons
-    scope.floorplanner.modeResetCallbacks.add(function(mode) {
+    var floorplannerModes = window.BP3D_floorplannerModes || { MOVE: 0, DRAW: 1, DELETE: 2 };
+
+    scope.floorplanner.getModeResetCallbacks().add(function(mode) {
       $(draw).removeClass(activeStlye);
       $(remove).removeClass(activeStlye);
       $(move).removeClass(activeStlye);
-      if (mode == BP3D.Floorplanner.floorplannerModes.MOVE) {
+      if (mode == floorplannerModes.MOVE) {
           $(move).addClass(activeStlye);
-      } else if (mode == BP3D.Floorplanner.floorplannerModes.DRAW) {
+      } else if (mode == floorplannerModes.DRAW) {
           $(draw).addClass(activeStlye);
-      } else if (mode == BP3D.Floorplanner.floorplannerModes.DELETE) {
+      } else if (mode == floorplannerModes.DELETE) {
           $(remove).addClass(activeStlye);
       }
 
-      if (mode == BP3D.Floorplanner.floorplannerModes.DRAW) {
+      if (mode == floorplannerModes.DRAW) {
         $("#draw-walls-hint").show();
         scope.handleWindowResize();
       } else {
@@ -441,15 +443,15 @@ var ViewerFloorplanner = function(blueprint3d) {
     });
 
     $(move).click(function(){
-      scope.floorplanner.setMode(BP3D.Floorplanner.floorplannerModes.MOVE);
+      scope.floorplanner.setMode(floorplannerModes.MOVE);
     });
 
     $(draw).click(function(){
-      scope.floorplanner.setMode(BP3D.Floorplanner.floorplannerModes.DRAW);
+      scope.floorplanner.setMode(floorplannerModes.DRAW);
     });
 
     $(remove).click(function(){
-      scope.floorplanner.setMode(BP3D.Floorplanner.floorplannerModes.DELETE);
+      scope.floorplanner.setMode(floorplannerModes.DELETE);
     });
   }
 
@@ -516,6 +518,11 @@ $(document).ready(function() {
     textureDir: "models/textures/",
     widget: false
   }
+  if (typeof BP3D === 'undefined') {
+    console.error('BP3D is not defined. Make sure example/js/blueprint3d.js is loaded before example.js and that it contains compiled code.');
+    return;
+  }
+
   var blueprint3d = new BP3D.Blueprint3d(opts);
 
   var modalEffects = new ModalEffects(blueprint3d);

@@ -1,0 +1,13 @@
+﻿src/core/configuration.ts(3,8): error TS1540: A 'namespace' declaration should not be declared using the 'module' keyword. Please use the 'namespace' keyword instead.
+src/core/configuration.ts(3,13): error TS1540: A 'namespace' declaration should not be declared using the 'module' keyword. Please use the 'namespace' keyword instead.
+src/core/configuration.ts(21,16): error TS2304: Cannot find name 'dimInch'.
+src/core/log.ts(1,8): error TS1540: A 'namespace' declaration should not be declared using the 'module' keyword. Please use the 'namespace' keyword instead.
+src/core/log.ts(1,13): error TS1540: A 'namespace' declaration should not be declared using the 'module' keyword. Please use the 'namespace' keyword instead.
+src/items/item.ts(110,10): error TS2416: Property 'remove' in type 'Item' is not assignable to the same property in base type 'Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, Material | Material[], Object3DEventMap>'.
+  Type '() => void' is not assignable to type '(...object: Object3D<Object3DEventMap>[]) => this'.
+    Type 'void' is not assignable to type 'this'.
+      'this' could be instantiated with an arbitrary type which could be unrelated to 'void'.
+src/items/item.ts(319,29): error TS2345: Argument of type 'this' is not assignable to parameter of type 'Object3D<Object3DEventMap>'.
+  Type 'Item' is not assignable to type 'Object3D<Object3DEventMap>'.
+    The types returned by 'remove(...)' are incompatible between these types.
+      Type 'void' is not assignable to type 'Object3D<Object3DEventMap>'.
