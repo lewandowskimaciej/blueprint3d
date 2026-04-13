@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { Callbacks } from '../core/callbacks';
 import { Utils } from '../core/utils';
 import { Wall } from './wall';
 
@@ -10,9 +10,9 @@ export class Corner {
   private wallStarts: Wall[] = [];
   private wallEnds: Wall[] = [];
 
-  private moved_callbacks = ($ as any).Callbacks();
-  private deleted_callbacks = ($ as any).Callbacks();
-  private action_callbacks = ($ as any).Callbacks();
+  private moved_callbacks = new Callbacks();
+  private deleted_callbacks = new Callbacks();
+  private action_callbacks = new Callbacks();
 
   constructor(private floorplan: any, public x: number, public y: number, id?: string) {
     this.id = id || Utils.guid();

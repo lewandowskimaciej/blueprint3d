@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import $ from 'jquery';
 import { Utils } from '../core/utils';
 
 export var Controller = function (three, model, camera, element, controls, hud) {
@@ -31,9 +30,9 @@ export var Controller = function (three, model, camera, element, controls, hud) 
   this.needsUpdate = true;
 
   function init() {
-    element.mousedown(mouseDownEvent);
-    element.mouseup(mouseUpEvent);
-    element.mousemove(mouseMoveEvent);
+    element.addEventListener('mousedown', mouseDownEvent);
+    element.addEventListener('mouseup', mouseUpEvent);
+    element.addEventListener('mousemove', mouseMoveEvent);
     mouse = new THREE.Vector2();
     scene.itemRemovedCallbacks.add(itemRemoved);
     scene.itemLoadedCallbacks.add(itemLoaded);
@@ -41,6 +40,9 @@ export var Controller = function (three, model, camera, element, controls, hud) 
   }
 
   function itemLoaded(item) {
+    if (!item) {
+      return;
+    }
     if (!item.position_set) {
       scope.setSelectedObject(item);
       switchState(states.DRAGGING);

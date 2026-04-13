@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import $ from 'jquery';
+import { Callbacks } from '../core/callbacks';
 import { Utils } from '../core/utils';
 import { Wall } from './wall';
 import { Corner } from './corner';
@@ -14,7 +14,7 @@ export class HalfEdge {
   public invInteriorTransform = new THREE.Matrix4();
   public exteriorTransform = new THREE.Matrix4();
   public invExteriorTransform = new THREE.Matrix4();
-  public redrawCallbacks = ($ as any).Callbacks();
+  public redrawCallbacks = new Callbacks();
 
   constructor(private room: any, public wall: Wall, private front: boolean) {
     this.front = front || false;

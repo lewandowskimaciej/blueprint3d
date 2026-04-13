@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import $ from 'jquery';
+import { Callbacks } from '../core/callbacks';
 import { Skybox } from './skybox';
 import { Controls } from './controls';
 import { HUD } from './hud';
@@ -9,6 +9,7 @@ import { Lights } from './lights';
 
 export var Main = function (model, element, canvasElement, opts) {
   var scope = this;
+  opts = opts || {};
 
   var options = {
     resize: true,
@@ -27,7 +28,10 @@ export var Main = function (model, element, canvasElement, opts) {
 
   var scene = model.scene;
 
-  this.element = $(element);
+  this.element = typeof element === 'string' ? document.querySelector(element) : element;
+  if (!this.element) {
+    throw new Error(`Three container not found: ${element}`);
+  }
   var domElement;
 
   var camera;
@@ -48,15 +52,15 @@ export var Main = function (model, element, canvasElement, opts) {
   this.elementHeight;
   this.elementWidth;
 
-  this.itemSelectedCallbacks = ($ as any).Callbacks();
-  this.itemUnselectedCallbacks = ($ as any).Callbacks();
+  this.itemSelectedCallbacks = new Callbacks();
+  this.itemUnselectedCallbacks = new Callbacks();
 
-  this.wallClicked = ($ as any).Callbacks();
-  this.floorClicked = ($ as any).Callbacks();
-  this.nothingClicked = ($ as any).Callbacks();
+  this.wallClicked = new Callbacks();
+  this.floorClicked = new Callbacks();
+  this.nothingClicked = new Callbacks();
 
   function init() {
-    domElement = scope.element.get(0);
+    domElement = scope.element;
     camera = new THREE.PerspectiveCamera(45, 1, 1, 10000);
     renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -73,13 +77,13 @@ export var Main = function (model, element, canvasElement, opts) {
     hud = new (HUD as any)(scope);
 
     controller = new (Controller as any)(
-      scope, model, camera, scope.element, scope.controls, hud);
+      scope, model, camera, domElement, scope.controls, hud);
 
     domElement.appendChild(renderer.domElement);
 
     scope.updateWindowSize();
     if (options.resize) {
-      $(window).on('resize', scope.updateWindowSize);
+      window.addEventListener('resize', scope.updateWindowSize);
     }
 
     scope.centerCamera();
@@ -91,11 +95,13 @@ export var Main = function (model, element, canvasElement, opts) {
 
     animate();
 
-    scope.element.mouseenter(function () {
+    domElement.addEventListener('mouseenter', function () {
       mouseOver = true;
-    }).mouseleave(function () {
+    });
+    domElement.addEventListener('mouseleave', function () {
       mouseOver = false;
-    }).click(function () {
+    });
+    domElement.addEventListener('click', function () {
       hasClicked = true;
     });
   }
@@ -184,14 +190,15 @@ export var Main = function (model, element, canvasElement, opts) {
   };
 
   this.updateWindowSize = function () {
-    scope.heightMargin = scope.element.offset().top;
-    scope.widthMargin = scope.element.offset().left;
+    var bounds = scope.element.getBoundingClientRect();
+    scope.heightMargin = bounds.top;
+    scope.widthMargin = bounds.left;
 
-    scope.elementWidth = scope.element.innerWidth();
+    scope.elementWidth = scope.element.clientWidth;
     if (options.resize) {
       scope.elementHeight = window.innerHeight - scope.heightMargin;
     } else {
-      scope.elementHeight = scope.element.innerHeight();
+      scope.elementHeight = scope.element.clientHeight;
     }
 
     camera.aspect = scope.elementWidth / scope.elementHeight;

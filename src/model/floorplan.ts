@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import $ from 'jquery';
+import { Callbacks } from '../core/callbacks';
 import { Utils } from '../core/utils';
 import { Wall } from './wall';
 import { Corner } from './corner';
@@ -13,11 +13,11 @@ export class Floorplan {
   private corners: Corner[] = [];
   private rooms: Room[] = [];
 
-  private new_wall_callbacks = ($ as any).Callbacks();
-  private new_corner_callbacks = ($ as any).Callbacks();
-  private redraw_callbacks = ($ as any).Callbacks();
-  private updated_rooms = ($ as any).Callbacks();
-  public roomLoadedCallbacks = ($ as any).Callbacks();
+  private new_wall_callbacks = new Callbacks();
+  private new_corner_callbacks = new Callbacks();
+  private redraw_callbacks = new Callbacks();
+  private updated_rooms = new Callbacks();
+  public roomLoadedCallbacks = new Callbacks();
 
   private floorTextures: { [key: string]: any } = {};
 

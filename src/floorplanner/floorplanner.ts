@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { Callbacks } from '../core/callbacks';
 import { Floorplan } from '../model/floorplan';
 import { FloorplannerView } from './floorplanner_view';
 
@@ -45,10 +45,10 @@ export class Floorplanner {
   private wallWidth: number;
 
   /** */
-  private modeResetCallbacks = ($ as any).Callbacks();
+  private modeResetCallbacks = new Callbacks();
 
   /** */
-  private canvasElement;
+  private canvasElement: HTMLCanvasElement;
 
   /** */
   private view: FloorplannerView;
@@ -85,7 +85,11 @@ export class Floorplanner {
 
   /** */
   constructor(canvas: string, private floorplan: Floorplan) {
-    this.canvasElement = $("#" + canvas);
+    var canvasElement = document.getElementById(canvas) as HTMLCanvasElement;
+    if (!canvasElement) {
+      throw new Error(`Floorplanner canvas not found: #${canvas}`);
+    }
+    this.canvasElement = canvasElement;
 
     this.view = new FloorplannerView(this.floorplan, this, canvas);
 
@@ -100,21 +104,21 @@ export class Floorplanner {
 
     var scope = this;
 
-    this.canvasElement.mousedown(() => {
+    this.canvasElement.addEventListener('mousedown', () => {
       scope.mousedown();
     });
-    this.canvasElement.mousemove((event) => {
+    this.canvasElement.addEventListener('mousemove', (event: MouseEvent) => {
       scope.mousemove(event);
     });
-    this.canvasElement.mouseup(() => {
+    this.canvasElement.addEventListener('mouseup', () => {
       scope.mouseup();
     });
-    this.canvasElement.mouseleave(() => {
+    this.canvasElement.addEventListener('mouseleave', () => {
       scope.mouseleave();
     });
 
-    $(document).keyup((e) => {
-      if (e.keyCode == 27) {
+    document.addEventListener('keyup', (e: KeyboardEvent) => {
+      if (e.keyCode == 27 || e.key === 'Escape') {
         scope.escapeKey();
       }
     });
@@ -173,14 +177,15 @@ export class Floorplanner {
   }
 
   /** */
-  private mousemove(event) {
+  private mousemove(event: MouseEvent) {
     this.mouseMoved = true;
 
     this.rawMouseX = event.clientX;
     this.rawMouseY = event.clientY;
 
-    this.mouseX = (event.clientX - this.canvasElement.offset().left) * this.cmPerPixel + this.originX * this.cmPerPixel;
-    this.mouseY = (event.clientY - this.canvasElement.offset().top) * this.cmPerPixel + this.originY * this.cmPerPixel;
+    var canvasBounds = this.canvasElement.getBoundingClientRect();
+    this.mouseX = (event.clientX - canvasBounds.left) * this.cmPerPixel + this.originX * this.cmPerPixel;
+    this.mouseY = (event.clientY - canvasBounds.top) * this.cmPerPixel + this.originY * this.cmPerPixel;
 
     if (this.mode == floorplannerModes.DRAW || (this.mode == floorplannerModes.MOVE && this.mouseDown)) {
       this.updateTarget();
@@ -276,8 +281,8 @@ export class Floorplanner {
 
   /** Sets the origin so that floorplan is centered */
   private resetOrigin() {
-    var centerX = this.canvasElement.innerWidth() / 2.0;
-    var centerY = this.canvasElement.innerHeight() / 2.0;
+    var centerX = this.canvasElement.clientWidth / 2.0;
+    var centerY = this.canvasElement.clientHeight / 2.0;
     var centerFloorplan = this.floorplan.getCenter();
     this.originX = centerFloorplan.x * this.pixelsPerCm - centerX;
     this.originY = centerFloorplan.z * this.pixelsPerCm - centerY;

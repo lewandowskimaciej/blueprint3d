@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import $ from 'jquery';
+import { Callbacks } from '../core/callbacks';
 import { Utils } from '../core/utils';
 import { Corner } from './corner';
 import { HalfEdge } from './half_edge';
@@ -13,7 +13,7 @@ export class Room {
   public interiorCorners: any[] = [];
   private edgePointer: any = null;
   public floorPlane: THREE.Mesh = null;
-  private floorChangeCallbacks = ($ as any).Callbacks();
+  private floorChangeCallbacks = new Callbacks();
 
   constructor(private floorplan: any, public corners: Corner[]) {
     this.updateWalls();
@@ -33,6 +33,11 @@ export class Room {
     var uuid = this.getUuid();
     var tex = this.floorplan.getFloorTexture(uuid);
     return tex || defaultRoomTexture;
+  }
+
+  public setTexture(textureUrl: string, _textureStretch: boolean, textureScale: number) {
+    this.floorplan.setFloorTexture(this.getUuid(), textureUrl, textureScale);
+    this.floorChangeCallbacks.fire();
   }
 
   private generatePlane() {

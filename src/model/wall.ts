@@ -1,4 +1,4 @@
-import $ from 'jquery';
+import { Callbacks } from '../core/callbacks';
 import { Configuration, configWallThickness, configWallHeight } from '../core/dimensioning';
 import { Utils } from '../core/utils';
 
@@ -20,9 +20,9 @@ export class Wall {
   public thickness = Configuration.getNumericValue(configWallThickness);
   public height = Configuration.getNumericValue(configWallHeight);
 
-  private moved_callbacks = ($ as any).Callbacks();
-  private deleted_callbacks = ($ as any).Callbacks();
-  private action_callbacks = ($ as any).Callbacks();
+  private moved_callbacks = new Callbacks();
+  private deleted_callbacks = new Callbacks();
+  private action_callbacks = new Callbacks();
 
   constructor(private start: any, private end: any) {
     this.id = this.getUuid();

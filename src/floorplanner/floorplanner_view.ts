@@ -1,4 +1,3 @@
-import $ from 'jquery';
 import { Dimensioning } from '../core/dimensioning';
 import { Utils } from '../core/utils';
 import { Floorplan } from '../model/floorplan';
@@ -46,11 +45,15 @@ export class FloorplannerView {
 
   /** */
   constructor(private floorplan: Floorplan, private viewmodel: Floorplanner, private canvas: string) {
-    this.canvasElement = document.getElementById(canvas) as HTMLCanvasElement;
+    var canvasElement = document.getElementById(canvas) as HTMLCanvasElement;
+    if (!canvasElement) {
+      throw new Error(`Floorplanner canvas view not found: #${canvas}`);
+    }
+    this.canvasElement = canvasElement;
     this.context = this.canvasElement.getContext('2d');
 
     var scope = this;
-    $(window).on('resize', () => {
+    window.addEventListener('resize', () => {
       scope.handleWindowResize();
     });
     this.handleWindowResize();
@@ -58,12 +61,16 @@ export class FloorplannerView {
 
   /** */
   public handleWindowResize() {
-    var canvasSel = $("#" + this.canvas);
-    var parent = canvasSel.parent();
-    canvasSel.height(parent.innerHeight());
-    canvasSel.width(parent.innerWidth());
-    this.canvasElement.height = parent.innerHeight();
-    this.canvasElement.width = parent.innerWidth();
+    var parent = this.canvasElement.parentElement;
+    if (!parent) {
+      return;
+    }
+    var parentHeight = parent.clientHeight;
+    var parentWidth = parent.clientWidth;
+    this.canvasElement.style.height = `${parentHeight}px`;
+    this.canvasElement.style.width = `${parentWidth}px`;
+    this.canvasElement.height = parentHeight;
+    this.canvasElement.width = parentWidth;
     this.draw();
   }
 

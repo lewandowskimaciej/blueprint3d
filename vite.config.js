@@ -1,12 +1,20 @@
+import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  root: 'example',
+  root: resolve(__dirname, 'example'),
   server: {
-    host: true
+    host: true,
+    open: '/index.html',
+    fs: {
+      allow: [
+        resolve(__dirname, 'example'),
+        resolve(__dirname, 'src')
+      ]
+    }
   },
   build: {
-    outDir: '../dist',
+    outDir: resolve(__dirname, 'dist'),
     emptyOutDir: true
   }
 })

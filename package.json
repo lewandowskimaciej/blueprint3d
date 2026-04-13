@@ -13,7 +13,8 @@
     "segseg": "^0.2.1",
     "three": "^0.183.0",
     "underscore": "^1.7.0",
-    "vec2": "^1.6.0"
+    "vec2": "^1.6.0",
+    "vue": "^3.5.32"
   },
   "devDependencies": {
     "@types/jquery": "^3.5.0",

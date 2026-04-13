@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import $ from 'jquery';
+import { Callbacks } from '../core/callbacks';
 import { Floorplan } from './floorplan';
 import { Scene } from './scene';
 
@@ -15,16 +15,16 @@ export class Model {
   public scene: Scene;
 
   /** */
-  private roomLoadingCallbacks = ($ as any).Callbacks();
+  private roomLoadingCallbacks = new Callbacks();
 
   /** */
-  private roomLoadedCallbacks = ($ as any).Callbacks();
+  private roomLoadedCallbacks = new Callbacks();
 
   /** name */
-  private roomSavedCallbacks = ($ as any).Callbacks();
+  private roomSavedCallbacks = new Callbacks();
 
   /** success (bool), copy (bool) */
-  private roomDeletedCallbacks = ($ as any).Callbacks();
+  private roomDeletedCallbacks = new Callbacks();
 
   /**
    * Constructs a new model.

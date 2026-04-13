@@ -6,99 +6,85 @@
     <link href="css/bootstrap.css" rel="stylesheet">
     <link href="css/example.css" rel="stylesheet">
 
-    <script type="module">
-      import { Blueprint3d, floorplannerModes } from '../src/main.ts';
-      window.BP3D = { Blueprint3d };
-      window.BP3D_floorplannerModes = floorplannerModes;
-    </script>
-
-    <script src="js/jquery.js"></script>
-    <script src="js/bootstrap.js"></script>
-
-    <script src="js/items.js"></script>
-    <script src="js/example.js" defer></script>
+    <script type="module" src="js/app.ts"></script>
   </head>
 
   <body>
-
-    <div class="container-fluid">
+    <div id="app" class="container-fluid">
       <div class="row main-row">
-        <!-- Left Column -->
-        <div class="col-xs-3 sidebar">
-          <!-- Main Navigation -->
+        <div class="col-xs-3 sidebar" :style="{ height: `${sidebarHeight}px` }">
           <ul class="nav nav-sidebar">
-            <li id="floorplan_tab"><a href="#">
-              Edit Floorplan
-              <span class="glyphicon glyphicon-chevron-right pull-right"></span>
-            </a></li>
-            <li id="design_tab"><a href="#">
-              Design
-              <span class="glyphicon glyphicon-chevron-right pull-right"></span>
-            </a></li>
-            <li id="items_tab"><a href="#">
-              Add Items
-              <span class="glyphicon glyphicon-chevron-right pull-right"></span>
-            </a></li>
+            <li id="floorplan_tab" :class="{ active: currentState === 'FLOORPLAN' }">
+              <a href="#" @click.prevent="selectState('FLOORPLAN')">
+                Edit Floorplan
+                <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+              </a>
+            </li>
+            <li id="design_tab" :class="{ active: currentState === 'DEFAULT' }">
+              <a href="#" @click.prevent="selectState('DEFAULT')">
+                Design
+                <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+              </a>
+            </li>
+            <li id="items_tab" :class="{ active: currentState === 'SHOP' }">
+              <a href="#" @click.prevent="selectState('SHOP')">
+                Add Items
+                <span class="glyphicon glyphicon-chevron-right pull-right"></span>
+              </a>
+            </li>
           </ul>
           <hr />
 
-          <!-- Context Menu -->
-          <div id="context-menu">
+          <div id="context-menu" :style="{ display: selectedItem ? 'block' : 'none' }">
             <div style="margin: 0 20px">
-              <span id="context-menu-name" class="lead"></span>
+              <span id="context-menu-name" class="lead">{{ selectedItemName }}</span>
               <br /><br />
-              <button class="btn btn-block btn-danger" id="context-menu-delete">
+              <button class="btn btn-block btn-danger" id="context-menu-delete" @click="deleteSelectedItem">
                 <span class="glyphicon glyphicon-trash"></span>
                 Delete Item
               </button>
-            <br />
-            <div class="panel panel-default">
-              <div class="panel-heading">Adjust Size</div>
-              <div class="panel-body" style="color: #333333">
-
-                <div class="form form-horizontal" class="lead">
-                  <div class="form-group">
-                    <label class="col-sm-5 control-label">
-                       Width
-                    </label>
-                    <div class="col-sm-6">
-                      <input type="number" class="form-control" id="item-width">
+              <br />
+              <div class="panel panel-default">
+                <div class="panel-heading">Adjust Size</div>
+                <div class="panel-body" style="color: #333333">
+                  <div class="form form-horizontal lead">
+                    <div class="form-group">
+                      <label class="col-sm-5 control-label">Width</label>
+                      <div class="col-sm-6">
+                        <input id="item-width" type="number" class="form-control" v-model="itemWidth" @change="resizeSelectedItem">
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label class="col-sm-5 control-label">Depth</label>
+                      <div class="col-sm-6">
+                        <input id="item-depth" type="number" class="form-control" v-model="itemDepth" @change="resizeSelectedItem">
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label class="col-sm-5 control-label">Height</label>
+                      <div class="col-sm-6">
+                        <input id="item-height" type="number" class="form-control" v-model="itemHeight" @change="resizeSelectedItem">
+                      </div>
                     </div>
                   </div>
-                  <div class="form-group">
-                    <label class="col-sm-5 control-label">
-                      Depth
-                    </label>
-                    <div class="col-sm-6">
-                      <input type="number" class="form-control" id="item-depth">
-                    </div>
-                  </div>
-                  <div class="form-group">
-                    <label class="col-sm-5 control-label">
-                      Height
-                    </label>
-                    <div class="col-sm-6">
-                      <input type="number" class="form-control" id="item-height">
-                    </div>
-                  </div>
+                  <small><span class="text-muted">Measurements in inches.</span></small>
                 </div>
-                <small><span class="text-muted">Measurements in inches.</span></small>
               </div>
-            </div>
 
-            <label><input type="checkbox" id="fixed" /> Lock in place</label>
-            <br /><br />
+              <label>
+                <input id="fixed" type="checkbox" v-model="selectedItemFixed" @change="toggleSelectedItemFixed" />
+                Lock in place
+              </label>
+              <br /><br />
             </div>
           </div>
 
-          <!-- Floor textures -->
-          <div id="floorTexturesDiv" style="display:none; padding: 0 20px">
+          <div id="floorTexturesDiv" :style="{ display: texturePanel === 'floor' ? 'block' : 'none', padding: '0 20px' }">
             <div class="panel panel-default">
               <div class="panel-heading">Adjust Floor</div>
               <div class="panel-body" style="color: #333333">
-
-                <div class="col-sm-6" style="padding: 3px">
-                  <a href="#" class="thumbnail texture-select-thumbnail" texture-url="rooms/textures/light_fine_wood.jpg" texture-stretch="false" texture-scale="300">
+                <div class="col-sm-6" style="padding: 3px" v-for="texture in floorTextures" :key="texture.url">
+                  <a href="#" class="thumbnail texture-select-thumbnail" @click="applyTexture(texture, $event)">
                     <img alt="Thumbnail light fine wood" src="rooms/thumbnails/thumbnail_light_fine_wood.jpg" />
                   </a>
                 </div>
@@ -106,23 +92,22 @@
             </div>
           </div>
 
-          <!-- Wall Textures -->
-          <div id="wallTextures" style="display:none; padding: 0 20px">
+          <div id="wallTextures" :style="{ display: texturePanel === 'wall' ? 'block' : 'none', padding: '0 20px' }">
             <div class="panel panel-default">
               <div class="panel-heading">Adjust Wall</div>
               <div class="panel-body" style="color: #333333">
                 <div class="col-sm-6" style="padding: 3px">
-                  <a href="#" class="thumbnail texture-select-thumbnail" texture-url="rooms/textures/marbletiles.jpg" texture-stretch="false" texture-scale="300">
+                  <a href="#" class="thumbnail texture-select-thumbnail" @click="applyTexture(wallTextures[0], $event)">
                     <img alt="Thumbnail marbletiles" src="rooms/thumbnails/thumbnail_marbletiles.jpg" />
                   </a>
                 </div>
                 <div class="col-sm-6" style="padding: 3px">
-                  <a href="#" class="thumbnail texture-select-thumbnail" texture-url="rooms/textures/wallmap_yellow.png" texture-stretch="true" texture-scale="">
+                  <a href="#" class="thumbnail texture-select-thumbnail" @click="applyTexture(wallTextures[1], $event)">
                     <img alt="Thumbnail wallmap yellow" src="rooms/thumbnails/thumbnail_wallmap_yellow.png" />
                   </a>
                 </div>
                 <div class="col-sm-6" style="padding: 3px">
-                  <a href="#" class="thumbnail texture-select-thumbnail" texture-url="rooms/textures/light_brick.jpg" texture-stretch="false" texture-scale="100">
+                  <a href="#" class="thumbnail texture-select-thumbnail" @click="applyTexture(wallTextures[2], $event)">
                     <img alt="Thumbnail light brick" src="rooms/thumbnails/thumbnail_light_brick.jpg" />
                   </a>
                 </div>
@@ -131,98 +116,116 @@
           </div>
         </div>
 
-        <!-- Right Column -->
         <div class="col-xs-9 main">
-
-          <!-- 3D Viewer -->
-          <div id="viewer">
-
+          <div id="viewer" :style="{ display: currentState === 'DEFAULT' ? 'block' : 'none' }">
             <div id="main-controls">
-              <a href="#" class="btn btn-default btn-sm" id="new">
-                New Plan
-              </a>
-              <a href="#" class="btn btn-default btn-sm" id="saveFile">
-                Save Plan
-              </a>
-              <a class="btn btn-sm btn-default btn-file">
-               <input type="file" class="hidden-input" id="loadFile">
-               Load Plan
-              </a>
+              <a href="#" class="btn btn-default btn-sm" id="new" @click="newDesign">New Plan</a>
+              <a href="#" class="btn btn-default btn-sm" id="saveFile" @click="saveDesign">Save Plan</a>
+              <label class="btn btn-sm btn-default btn-file">
+                <input type="file" class="hidden-input" id="loadFile" @change="loadDesign">
+                Load Plan
+              </label>
             </div>
 
             <div id="camera-controls">
-              <a href="#" class="btn btn-default bottom" id="zoom-out">
+              <a href="#" class="btn btn-default bottom" id="zoom-out" @click="zoomOut" @dblclick.prevent.stop>
                 <span class="glyphicon glyphicon-zoom-out"></span>
               </a>
-              <a href="#" class="btn btn-default bottom" id="reset-view">
+              <a href="#" class="btn btn-default bottom" id="reset-view" @click="resetView">
                 <span class="glyphicon glyphicon glyphicon-home"></span>
               </a>
-              <a href="#" class="btn btn-default bottom" id="zoom-in">
+              <a href="#" class="btn btn-default bottom" id="zoom-in" @click="zoomIn" @dblclick.prevent.stop>
                 <span class="glyphicon glyphicon-zoom-in"></span>
               </a>
 
               <span>&nbsp;</span>
 
-              <a class="btn btn-default bottom" href="#" id="move-left" >
+              <a href="#" class="btn btn-default bottom" id="move-left" @click="panLeft" @dblclick.prevent.stop>
                 <span class="glyphicon glyphicon-arrow-left"></span>
               </a>
               <span class="btn-group-vertical">
-                <a class="btn btn-default" href="#" id="move-up">
+                <a href="#" class="btn btn-default" id="move-up" @click="panUp" @dblclick.prevent.stop>
                   <span class="glyphicon glyphicon-arrow-up"></span>
                 </a>
-                <a class="btn btn-default" href="#" id="move-down">
+                <a href="#" class="btn btn-default" id="move-down" @click="panDown" @dblclick.prevent.stop>
                   <span class="glyphicon glyphicon-arrow-down"></span>
                 </a>
               </span>
-              <a class="btn btn-default bottom" href="#" id="move-right" >
+              <a href="#" class="btn btn-default bottom" id="move-right" @click="panRight" @dblclick.prevent.stop>
                 <span class="glyphicon glyphicon-arrow-right"></span>
               </a>
             </div>
 
-            <div id="loading-modal">
+            <div id="loading-modal" :style="{ display: loadingItems > 0 ? 'block' : 'none' }">
               <h1>Loading...</h1>
             </div>
           </div>
 
-          <!-- 2D Floorplanner -->
-          <div id="floorplanner">
+          <div
+            id="floorplanner"
+            :style="{ display: currentState === 'FLOORPLAN' ? 'block' : 'none', height: `${floorplannerHeight}px` }"
+          >
             <canvas id="floorplanner-canvas"></canvas>
             <div id="floorplanner-controls">
-
-              <button id="move" class="btn btn-sm btn-default">
+              <button
+                id="move"
+                class="btn btn-sm btn-default"
+                :class="{ 'btn-primary disabled': floorplannerMode === floorplannerModes.MOVE }"
+                @click="setFloorplannerMode(floorplannerModes.MOVE)"
+              >
                 <span class="glyphicon glyphicon-move"></span>
                 Move Walls
               </button>
-              <button id="draw" class="btn btn-sm btn-default">
+              <button
+                id="draw"
+                class="btn btn-sm btn-default"
+                :class="{ 'btn-primary disabled': floorplannerMode === floorplannerModes.DRAW }"
+                @click="setFloorplannerMode(floorplannerModes.DRAW)"
+              >
                 <span class="glyphicon glyphicon-pencil"></span>
                 Draw Walls
               </button>
-              <button id="delete" class="btn btn-sm btn-default">
+              <button
+                id="delete"
+                class="btn btn-sm btn-default"
+                :class="{ 'btn-primary disabled': floorplannerMode === floorplannerModes.DELETE }"
+                @click="setFloorplannerMode(floorplannerModes.DELETE)"
+              >
                 <span class="glyphicon glyphicon-remove"></span>
                 Delete Walls
               </button>
               <span class="pull-right">
-                <button class="btn btn-primary btn-sm" id="update-floorplan">Done &raquo;</button>
+                <button class="btn btn-primary btn-sm" id="update-floorplan" @click="selectState('DEFAULT')">Done &raquo;</button>
               </span>
-
             </div>
-            <div id="draw-walls-hint">
+            <div
+              id="draw-walls-hint"
+              :style="{ display: floorplannerMode === floorplannerModes.DRAW ? 'block' : 'none' }"
+            >
               Press the "Esc" key to stop drawing walls
             </div>
           </div>
 
-          <!-- Add Items -->
-          <div id="add-items">
+          <div
+            id="add-items"
+            :style="{ display: currentState === 'SHOP' ? 'block' : 'none', height: `${addItemsHeight}px` }"
+          >
             <div class="row" id="items-wrapper">
-
-              <!-- Items added here by items.js -->
+              <div class="col-sm-4" v-for="item in itemsCatalog" :key="item.model">
+                <a
+                  href="#"
+                  class="thumbnail add-item"
+                  @mousedown="addCatalogItem(item, $event)"
+                  @click.prevent
+                >
+                  <img :src="item.image" alt="Add Item">
+                  {{ item.name }}
+                </a>
+              </div>
             </div>
           </div>
-
         </div>
-        <!-- End Right Column -->
       </div>
     </div>
-
   </body>
 </html>

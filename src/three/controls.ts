@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import $ from 'jquery';
+import { Callbacks } from '../core/callbacks';
 
 export var Controls = function (object, domElement) {
   this.object = object;
@@ -29,7 +29,7 @@ export var Controls = function (object, domElement) {
   this.noKeys = false;
   this.keys = { LEFT: 37, UP: 38, RIGHT: 39, BOTTOM: 40 };
 
-  this.cameraMovedCallbacks = ($ as any).Callbacks();
+  this.cameraMovedCallbacks = new Callbacks();
   this.needsUpdate = true;
 
   var scope = this;
