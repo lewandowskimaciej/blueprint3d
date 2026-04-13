@@ -19,6 +19,12 @@ export interface Options {
 
   /** The texture directory. */
   textureDir?: string;
+
+  /** Render scene on the main thread using WebGLRenderer. */
+  useMainRenderer?: boolean;
+
+  /** Prefer WebGPU renderer with automatic fallback to WebGL. */
+  preferWebGPU?: boolean;
 }
 
 /** Blueprint3D core application. */
@@ -36,7 +42,15 @@ export class Blueprint3d {
    */
   constructor(options: Options) {
     this.model = new Model(options.textureDir || '');
-    this.three = new (ThreeMain as any)(this.model, options.threeElement, options.threeCanvasElement, {});
+    this.three = new (ThreeMain as any)(
+      this.model,
+      options.threeElement,
+      options.threeCanvasElement,
+      {
+        renderEnabled: options.useMainRenderer !== false,
+        preferWebGPU: options.preferWebGPU !== false
+      }
+    );
 
     if (!options.widget) {
       this.floorplanner = new Floorplanner(options.floorplannerElement, this.model.floorplan);

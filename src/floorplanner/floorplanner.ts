@@ -48,6 +48,9 @@ export class Floorplanner {
   private modeResetCallbacks = new Callbacks();
 
   /** */
+  private changeCallbacks = new Callbacks();
+
+  /** */
   private canvasElement: HTMLCanvasElement;
 
   /** */
@@ -132,6 +135,10 @@ export class Floorplanner {
     return this.modeResetCallbacks;
   }
 
+  public getChangeCallbacks() {
+    return this.changeCallbacks;
+  }
+
   /** */
   private escapeKey() {
     this.setMode(floorplannerModes.MOVE);
@@ -168,8 +175,10 @@ export class Floorplanner {
     if (this.mode == floorplannerModes.DELETE) {
       if (this.activeCorner) {
         this.activeCorner.removeAll();
+        this.changeCallbacks.fire();
       } else if (this.activeWall) {
         this.activeWall.remove();
+        this.changeCallbacks.fire();
       } else {
         this.setMode(floorplannerModes.MOVE);
       }
@@ -250,6 +259,9 @@ export class Floorplanner {
         this.setMode(floorplannerModes.MOVE);
       }
       this.lastNode = corner;
+      this.changeCallbacks.fire();
+    } else if (this.mode == floorplannerModes.MOVE && this.mouseMoved && (this.activeCorner || this.activeWall)) {
+      this.changeCallbacks.fire();
     }
   }
 

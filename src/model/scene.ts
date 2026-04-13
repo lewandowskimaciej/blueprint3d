@@ -1,6 +1,11 @@
 import * as THREE from 'three';
+import { MeshPhysicalNodeMaterial } from 'three/webgpu';
 import { Callbacks } from '../core/callbacks';
 import { Utils } from '../core/utils';
+import { loadTextureCompat } from '../core/texture_loader';
+import { Factory } from '../items/factory';
+
+type MaterialMode = 'classic' | 'node';
 
 /**
  * The Scene is a manager of Items and also links to a ThreeJS scene.
@@ -15,6 +20,9 @@ export class Scene {
 
   /** */
   public needsUpdate = false;
+
+  /** */
+  private materialMode: MaterialMode = 'classic';
 
   /** */
   private itemLoadingCallbacks = new Callbacks();
@@ -53,6 +61,16 @@ export class Scene {
   /** Gets the items. */
   public getItems(): any[] {
     return this.items;
+  }
+
+  /** Sets preferred material system for newly created objects. */
+  public setMaterialMode(mode: MaterialMode) {
+    this.materialMode = mode === 'node' ? 'node' : 'classic';
+  }
+
+  /** Gets preferred material system. */
+  public getMaterialMode(): MaterialMode {
+    return this.materialMode;
   }
 
   /** Gets the count of items. */
@@ -100,47 +118,41 @@ export class Scene {
 
     this.itemLoadingCallbacks.fire();
 
-    // Dynamically import Factory to avoid circular deps at module load time
-    import('../items/factory').then(({ Factory }) => {
-      var fileLoader = new THREE.FileLoader();
-      fileLoader.load(fileName, (fileData: string) => {
-        try {
-          var json = scope.parseModelJson(fileData, fileName);
-          var parsed: { geometry: THREE.BufferGeometry, material: THREE.Material | THREE.Material[] };
+    var fileLoader = new THREE.FileLoader();
+    fileLoader.load(fileName, (fileData: string) => {
+      try {
+        var json = scope.parseModelJson(fileData, fileName);
+        var parsed: { geometry: THREE.BufferGeometry, material: THREE.Material | THREE.Material[] };
 
-          if (scope.isLegacyGeometryFormat(json)) {
-            parsed = {
-              geometry: scope.parseLegacyGeometry(json),
-              material: scope.createLegacyMaterials(json.materials || [], fileName)
-            };
-          } else {
-            parsed = scope.parseObjectFormat(json);
-          }
-
-          var item = new (Factory.getClass(itemType))(
-            scope.model,
-            metadata,
-            parsed.geometry,
-            parsed.material,
-            position,
-            rotation,
-            scale
-          );
-          item.fixed = fixed || false;
-          scope.items.push(item);
-          scope.add(item);
-          item.initObject();
-          scope.itemLoadedCallbacks.fire(item);
-        } catch (error) {
-          console.error(`Failed to parse model "${fileName}"`, error);
-          scope.itemLoadedCallbacks.fire(null);
+        if (scope.isLegacyGeometryFormat(json)) {
+          parsed = {
+            geometry: scope.parseLegacyGeometry(json),
+            material: scope.createLegacyMaterials(json.materials || [], fileName)
+          };
+        } else {
+          parsed = scope.parseObjectFormat(json);
         }
-      }, undefined, (error) => {
-        console.error(`Failed to load model "${fileName}"`, error);
+
+        var item = new (Factory.getClass(itemType))(
+          scope.model,
+          metadata,
+          parsed.geometry,
+          parsed.material,
+          position,
+          rotation,
+          scale
+        );
+        item.fixed = fixed || false;
+        scope.items.push(item);
+        scope.add(item);
+        item.initObject();
+        scope.itemLoadedCallbacks.fire(item);
+      } catch (error) {
+        console.error(`Failed to parse model "${fileName}"`, error);
         scope.itemLoadedCallbacks.fire(null);
-      });
-    }).catch((error) => {
-      console.error('Failed to import item factory', error);
+      }
+    }, undefined, (error) => {
+      console.error(`Failed to load model "${fileName}"`, error);
       scope.itemLoadedCallbacks.fire(null);
     });
   }
@@ -206,8 +218,14 @@ export class Scene {
 
     var material: THREE.Material | THREE.Material[] =
       materials.length === 0
-        ? new THREE.MeshStandardMaterial()
+        ? this.createPBRMaterial({})
         : (materials.length === 1 ? materials[0] : materials);
+
+    if (Array.isArray(material)) {
+      material = material.map((entry) => this.enhanceImportedMaterial(entry));
+    } else {
+      material = this.enhanceImportedMaterial(material);
+    }
 
     return { geometry, material };
   }
@@ -434,10 +452,9 @@ export class Scene {
 
   private createLegacyMaterials(materialsData: any[], fileName: string): THREE.Material | THREE.Material[] {
     if (!Array.isArray(materialsData) || materialsData.length === 0) {
-      return new THREE.MeshStandardMaterial();
+      return this.createPBRMaterial({});
     }
 
-    var textureLoader = new THREE.TextureLoader();
     var materials = materialsData.map((sourceMaterial) => {
       var opacity = typeof sourceMaterial.transparency === 'number' ? sourceMaterial.transparency : 1;
       var baseParams: any = {
@@ -460,45 +477,113 @@ export class Scene {
         );
       }
 
-      var shading = typeof sourceMaterial.shading === 'string' ? sourceMaterial.shading.toLowerCase() : '';
-      var material: THREE.Material;
-      if (shading === 'phong') {
-        var phongParams: any = { ...baseParams };
-        if (Array.isArray(sourceMaterial.colorSpecular) && sourceMaterial.colorSpecular.length >= 3) {
-          phongParams.specular = new THREE.Color(
-            sourceMaterial.colorSpecular[0],
-            sourceMaterial.colorSpecular[1],
-            sourceMaterial.colorSpecular[2]
-          );
-        }
-        if (typeof sourceMaterial.specularCoef === 'number') {
-          phongParams.shininess = sourceMaterial.specularCoef;
-        }
-        material = new THREE.MeshPhongMaterial(phongParams);
-      } else if (shading === 'lambert') {
-        material = new THREE.MeshLambertMaterial(baseParams);
-      } else {
-        material = new THREE.MeshStandardMaterial(baseParams);
-      }
+      var material = this.createPBRMaterial({
+        ...baseParams,
+        roughness: this.estimateLegacyRoughness(sourceMaterial),
+        metalness: this.estimateLegacyMetalness(sourceMaterial),
+        clearcoat: this.estimateLegacyClearcoat(sourceMaterial),
+        clearcoatRoughness: 0.25,
+        envMapIntensity: 1.2
+      });
 
       if (typeof sourceMaterial.mapDiffuse === 'string' && sourceMaterial.mapDiffuse.length > 0) {
         var texturePath = this.resolveRelativePath(fileName, sourceMaterial.mapDiffuse);
-        var texture = textureLoader.load(texturePath);
+        var texture = loadTextureCompat(texturePath, () => {
+          this.needsUpdate = true;
+        });
         texture.colorSpace = THREE.SRGBColorSpace;
         if (Array.isArray(sourceMaterial.mapDiffuseWrap) && sourceMaterial.mapDiffuseWrap.length >= 2) {
           texture.wrapS = this.parseLegacyWrapMode(sourceMaterial.mapDiffuseWrap[0]);
           texture.wrapT = this.parseLegacyWrapMode(sourceMaterial.mapDiffuseWrap[1]);
         }
 
-        var meshMaterial = material as THREE.MeshLambertMaterial | THREE.MeshPhongMaterial | THREE.MeshStandardMaterial;
+        var meshMaterial = material as any;
         meshMaterial.map = texture;
         meshMaterial.needsUpdate = true;
       }
 
-      return material;
+      return this.enhanceImportedMaterial(material);
     });
 
     return materials.length === 1 ? materials[0] : materials;
+  }
+
+  private createPBRMaterial(params: any): THREE.Material {
+    var baseParams: any = {
+      roughness: 0.75,
+      metalness: 0.05,
+      envMapIntensity: 1.0,
+      ...params
+    };
+    if (this.materialMode === 'node') {
+      return new (MeshPhysicalNodeMaterial as any)(baseParams);
+    }
+    return new THREE.MeshPhysicalMaterial(baseParams);
+  }
+
+  private enhanceImportedMaterial(material: THREE.Material): THREE.Material {
+    var asAny = material as any;
+    var side = typeof asAny.side === 'number' ? asAny.side : THREE.FrontSide;
+    var opacity = typeof asAny.opacity === 'number' ? asAny.opacity : 1;
+    var transparent = !!asAny.transparent || opacity < 1;
+    var emissive = asAny.emissive ? asAny.emissive.clone() : new THREE.Color(0x000000);
+
+    var pbrParams: any = {
+      color: asAny.color ? asAny.color.clone() : new THREE.Color(0xffffff),
+      map: asAny.map || null,
+      normalMap: asAny.normalMap || null,
+      aoMap: asAny.aoMap || null,
+      emissive,
+      emissiveMap: asAny.emissiveMap || null,
+      transparent,
+      opacity,
+      side,
+      roughness: 0.72,
+      metalness: 0.08,
+      clearcoat: 0.06,
+      clearcoatRoughness: 0.32,
+      envMapIntensity: 1.25
+    };
+
+    if ('roughness' in asAny && typeof asAny.roughness === 'number') {
+      pbrParams.roughness = THREE.MathUtils.clamp(asAny.roughness, 0, 1);
+    }
+    if ('metalness' in asAny && typeof asAny.metalness === 'number') {
+      pbrParams.metalness = THREE.MathUtils.clamp(asAny.metalness, 0, 1);
+    }
+    if (asAny.shininess && typeof asAny.shininess === 'number') {
+      pbrParams.roughness = THREE.MathUtils.clamp(1 - Math.min(1, asAny.shininess / 128), 0.08, 0.95);
+    }
+
+    var upgraded = this.createPBRMaterial(pbrParams) as any;
+    if (upgraded.map && upgraded.map.colorSpace == null) {
+      upgraded.map.colorSpace = THREE.SRGBColorSpace;
+    }
+    upgraded.needsUpdate = true;
+    return upgraded as THREE.Material;
+  }
+
+  private estimateLegacyRoughness(sourceMaterial: any): number {
+    if (typeof sourceMaterial.specularCoef === 'number') {
+      return THREE.MathUtils.clamp(1 - Math.min(1, sourceMaterial.specularCoef / 128), 0.08, 0.95);
+    }
+    return 0.75;
+  }
+
+  private estimateLegacyMetalness(sourceMaterial: any): number {
+    if (Array.isArray(sourceMaterial.colorSpecular) && sourceMaterial.colorSpecular.length >= 3) {
+      var avgSpec = (sourceMaterial.colorSpecular[0] + sourceMaterial.colorSpecular[1] + sourceMaterial.colorSpecular[2]) / 3;
+      return THREE.MathUtils.clamp(avgSpec * 0.35, 0, 0.45);
+    }
+    return 0.04;
+  }
+
+  private estimateLegacyClearcoat(sourceMaterial: any): number {
+    var shading = typeof sourceMaterial.shading === 'string' ? sourceMaterial.shading.toLowerCase() : '';
+    if (shading === 'phong') {
+      return 0.12;
+    }
+    return 0.03;
   }
 
   private parseLegacyWrapMode(mode: string): THREE.Wrapping {

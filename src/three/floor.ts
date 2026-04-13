@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { MeshPhysicalNodeMaterial } from 'three/webgpu';
+import { loadTextureCompat } from '../core/texture_loader';
 
 export var Floor = function (scene, room) {
   var scope = this;
@@ -18,19 +20,39 @@ export var Floor = function (scene, room) {
     scope.addToScene();
   }
 
-  function buildFloor(): THREE.Mesh {
-    var textureSettings = scope.room.getTexture();
-    var loader = new THREE.TextureLoader();
-    var floorTexture = loader.load(textureSettings.url);
+    function buildFloor(): THREE.Mesh {
+      var textureSettings = scope.room.getTexture();
+    var floorTexture = loadTextureCompat(textureSettings.url, () => {
+      scene.needsUpdate = true;
+    });
+    floorTexture.colorSpace = THREE.SRGBColorSpace;
     floorTexture.wrapS = THREE.RepeatWrapping;
     floorTexture.wrapT = THREE.RepeatWrapping;
     floorTexture.repeat.set(1, 1);
-    var floorMaterialTop = new THREE.MeshPhongMaterial({
-      map: floorTexture,
-      side: THREE.DoubleSide,
-      color: 0xcccccc,
-      specular: 0x0a0a0a
-    });
+    const useNodeMaterial = typeof scene.getMaterialMode === 'function' && scene.getMaterialMode() === 'node';
+    // Polished hardwood / laminate: moderate roughness, thin clear-coat layer,
+    // stronger IBL contribution now that RoomEnvironment is set on the scene.
+    var floorMaterialTop = useNodeMaterial
+      ? new (MeshPhysicalNodeMaterial as any)({
+          map: floorTexture,
+          side: THREE.DoubleSide,
+          color: 0xffffff,
+          roughness: 0.72,
+          metalness: 0.02,
+          clearcoat: 0.20,
+          clearcoatRoughness: 0.12,
+          envMapIntensity: 1.6
+        })
+      : new THREE.MeshPhysicalMaterial({
+          map: floorTexture,
+          side: THREE.DoubleSide,
+          color: 0xffffff,
+          roughness: 0.72,
+          metalness: 0.02,
+          clearcoat: 0.20,
+          clearcoatRoughness: 0.12,
+          envMapIntensity: 1.6
+        });
 
     var textureScale = textureSettings.scale;
     var points: THREE.Vector2[] = [];

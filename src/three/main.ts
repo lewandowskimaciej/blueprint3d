@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Callbacks } from '../core/callbacks';
 import { Skybox } from './skybox';
 import { Controls } from './controls';
@@ -17,7 +19,9 @@ export var Main = function (model, element, canvasElement, opts) {
     spin: true,
     spinSpeed: .00002,
     clickPan: true,
-    canMoveFixedItems: false
+    canMoveFixedItems: false,
+    renderEnabled: true,
+    preferWebGPU: true
   };
 
   for (var opt in options) {
@@ -35,7 +39,9 @@ export var Main = function (model, element, canvasElement, opts) {
   var domElement;
 
   var camera;
-  var renderer;
+  var renderer: any;
+  var rendererMode: 'webgpu' | 'webgl' = 'webgl';
+  var rendererReady = true;
   this.controls;
   var controller;
   var floorplan;
@@ -59,16 +65,116 @@ export var Main = function (model, element, canvasElement, opts) {
   this.floorClicked = new Callbacks();
   this.nothingClicked = new Callbacks();
 
+  function hasWebGPUSupport() {
+    return (
+      typeof navigator !== 'undefined' &&
+      !!(navigator as any).gpu &&
+      typeof (globalThis as any).GPUCanvasContext !== 'undefined'
+    );
+  }
+
+  function configureRendererDefaults(targetRenderer: any) {
+    targetRenderer.autoClear = false;
+    targetRenderer.shadowMap.enabled = true;
+    // PCFSoftShadowMap gives smooth, artefact-free shadows for both directional
+    // and spot lights without the frustum-sensitivity of VSMShadowMap.
+    targetRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    targetRenderer.outputColorSpace = THREE.SRGBColorSpace;
+    targetRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+    targetRenderer.toneMappingExposure = 1.0;
+    if ('useLegacyLights' in targetRenderer) {
+      targetRenderer.useLegacyLights = false;
+    }
+  }
+
+  /**
+   * Generates a PMREMGenerator-based IBL environment from RoomEnvironment and
+   * assigns it to the THREE.Scene.  This enables physically correct reflections
+   * on all MeshPhysicalMaterial / MeshPhysicalNodeMaterial surfaces.
+   * Wrapped in try/catch so a WebGPU-incompatible PMREMGenerator won't crash.
+   */
+  function setupEnvironmentMap(activeRenderer: any) {
+    if (!activeRenderer) return;
+    try {
+      var pmrem = new THREE.PMREMGenerator(activeRenderer);
+      pmrem.compileEquirectangularShader();
+      var envTexture = pmrem.fromScene(new RoomEnvironment()).texture;
+      scene.getScene().environment = envTexture;
+      pmrem.dispose();
+      needsUpdate = true;
+    } catch (e) {
+      console.warn('Environment map setup failed (may be expected for WebGPU):', e);
+    }
+  }
+
+  function createRendererWithFallback() {
+    const rendererOptions: any = {
+      antialias: true,
+      preserveDrawingBuffer: true
+    };
+
+    if (options.preferWebGPU && hasWebGPUSupport()) {
+      try {
+        const webgpuRenderer: any = new WebGPURenderer(rendererOptions);
+        renderer = webgpuRenderer;
+        rendererMode = 'webgpu';
+        rendererReady = false;
+        configureRendererDefaults(renderer);
+        const initResult = typeof webgpuRenderer.init === 'function' ? webgpuRenderer.init() : null;
+        Promise.resolve(initResult).then(() => {
+          rendererReady = true;
+          setupEnvironmentMap(renderer);
+          needsUpdate = true;
+        }).catch((error) => {
+          console.error('WebGPU renderer initialization failed in main thread, switching to WebGL.', error);
+          const previousCanvas = renderer?.domElement;
+          renderer = new THREE.WebGLRenderer(rendererOptions);
+          rendererMode = 'webgl';
+          rendererReady = true;
+          configureRendererDefaults(renderer);
+          if (canvasElement) {
+            renderer.domElement.id = canvasElement;
+          }
+          if (previousCanvas && previousCanvas.parentElement) {
+            previousCanvas.parentElement.replaceChild(renderer.domElement, previousCanvas);
+          } else if (domElement && renderer.domElement.parentElement !== domElement) {
+            domElement.appendChild(renderer.domElement);
+          }
+          scope.updateWindowSize();
+          if ((model.scene as any).setMaterialMode) {
+            (model.scene as any).setMaterialMode('classic');
+          }
+          setupEnvironmentMap(renderer);
+          needsUpdate = true;
+        });
+      } catch (error) {
+        console.warn('WebGPU renderer creation failed in main thread, using WebGL fallback.', error);
+      }
+    }
+
+    if (!renderer) {
+      renderer = new THREE.WebGLRenderer(rendererOptions);
+      rendererMode = 'webgl';
+      rendererReady = true;
+      configureRendererDefaults(renderer);
+      // Synchronous WebGL path – environment map can be set up immediately
+      setupEnvironmentMap(renderer);
+    }
+
+    if (canvasElement) {
+      renderer.domElement.id = canvasElement;
+    }
+    if ((model.scene as any).setMaterialMode) {
+      (model.scene as any).setMaterialMode(rendererMode === 'webgpu' ? 'node' : 'classic');
+    }
+  }
+
   function init() {
     domElement = scope.element;
     camera = new THREE.PerspectiveCamera(45, 1, 1, 10000);
-    renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      preserveDrawingBuffer: true
-    });
-    renderer.autoClear = false;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    if (options.renderEnabled) {
+      createRendererWithFallback();
+    }
 
     var skybox = new (Skybox as any)(scene);
 
@@ -79,7 +185,9 @@ export var Main = function (model, element, canvasElement, opts) {
     controller = new (Controller as any)(
       scope, model, camera, domElement, scope.controls, hud);
 
-    domElement.appendChild(renderer.domElement);
+    if (renderer) {
+      domElement.appendChild(renderer.domElement);
+    }
 
     scope.updateWindowSize();
     if (options.resize) {
@@ -115,6 +223,9 @@ export var Main = function (model, element, canvasElement, opts) {
   }
 
   this.dataUrl = function () {
+    if (!renderer) {
+      return '';
+    }
     return renderer.domElement.toDataURL("image/png");
   };
 
@@ -160,11 +271,13 @@ export var Main = function (model, element, canvasElement, opts) {
 
   function render() {
     spin();
-    if (shouldRender()) {
+    if (renderer && rendererReady && shouldRender()) {
       renderer.clear();
       renderer.render(scene.getScene(), camera);
       renderer.clearDepth();
       renderer.render(hud.getScene(), camera);
+    } else {
+      shouldRender();
     }
     lastRender = Date.now();
   }
@@ -204,7 +317,9 @@ export var Main = function (model, element, canvasElement, opts) {
     camera.aspect = scope.elementWidth / scope.elementHeight;
     camera.updateProjectionMatrix();
 
-    renderer.setSize(scope.elementWidth, scope.elementHeight);
+    if (renderer) {
+      renderer.setSize(scope.elementWidth, scope.elementHeight);
+    }
     needsUpdate = true;
   };
 

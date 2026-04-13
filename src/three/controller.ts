@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { Utils } from '../core/utils';
+import { Callbacks } from '../core/callbacks';
 
 export var Controller = function (three, model, camera, element, controls, hud) {
   var scope = this;
 
   this.enabled = true;
+  this.itemTransformCompletedCallbacks = new Callbacks();
 
   var scene = model.scene;
   var plane: THREE.Mesh;
@@ -166,10 +168,14 @@ export var Controller = function (three, model, camera, element, controls, hud) 
         case states.DRAGGING:
           selectedObject.clickReleased();
           switchState(states.SELECTED);
+          scope.itemTransformCompletedCallbacks.fire(selectedObject);
           break;
         case states.ROTATING:
           if (!mouseMoved) switchState(states.ROTATING_FREE);
-          else switchState(states.SELECTED);
+          else {
+            switchState(states.SELECTED);
+            scope.itemTransformCompletedCallbacks.fire(selectedObject);
+          }
           break;
         case states.UNSELECTED:
           if (!mouseMoved) checkWallsAndFloors();

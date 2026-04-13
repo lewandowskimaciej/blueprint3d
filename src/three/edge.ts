@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { MeshPhysicalNodeMaterial } from 'three/webgpu';
 import { Utils } from '../core/utils';
+import { loadTextureCompat } from '../core/texture_loader';
 
 export var Edge = function (scene, edge, controls) {
   var scope = this;
@@ -81,7 +83,8 @@ export var Edge = function (scene, edge, controls) {
     var stretch = textureData.stretch;
     var url = textureData.url;
     var scale = textureData.scale;
-    texture = new THREE.TextureLoader().load(url, callback);
+    texture = loadTextureCompat(url, () => callback());
+    texture.colorSpace = THREE.SRGBColorSpace;
     if (!stretch) {
       var height = wall.height;
       var width = edge.interiorDistance();
@@ -93,16 +96,45 @@ export var Edge = function (scene, edge, controls) {
   }
 
   function updatePlanes() {
-    var wallMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      side: THREE.FrontSide,
-      map: texture,
-    });
+    const useNodeMaterial = typeof scene.getMaterialMode === 'function' && scene.getMaterialMode() === 'node';
+    // Painted interior wall: high roughness, minimal sheen, subtle IBL contribution.
+    var wallMaterial = useNodeMaterial
+      ? new (MeshPhysicalNodeMaterial as any)({
+          color: 0xffffff,
+          side: THREE.FrontSide,
+          map: texture,
+          roughness: 0.88,
+          metalness: 0.0,
+          clearcoat: 0.05,
+          clearcoatRoughness: 0.5,
+          envMapIntensity: 1.2
+        })
+      : new THREE.MeshPhysicalMaterial({
+          color: 0xffffff,
+          side: THREE.FrontSide,
+          map: texture,
+          roughness: 0.88,
+          metalness: 0.0,
+          clearcoat: 0.05,
+          clearcoatRoughness: 0.5,
+          envMapIntensity: 1.2
+        });
 
-    var fillerMaterial = new THREE.MeshBasicMaterial({
-      color: fillerColor,
-      side: THREE.DoubleSide
-    });
+    var fillerMaterial = useNodeMaterial
+      ? new (MeshPhysicalNodeMaterial as any)({
+          color: fillerColor,
+          side: THREE.DoubleSide,
+          roughness: 0.95,
+          metalness: 0.0,
+          envMapIntensity: 0.9
+        })
+      : new THREE.MeshPhysicalMaterial({
+          color: fillerColor,
+          side: THREE.DoubleSide,
+          roughness: 0.95,
+          metalness: 0.0,
+          envMapIntensity: 0.9
+        });
 
     planes.push(makeWall(
       edge.exteriorStart(), edge.exteriorEnd(),
@@ -183,7 +215,23 @@ export var Edge = function (scene, edge, controls) {
     ];
     const geometry = new THREE.BufferGeometry();
     (geometry as any).setFromPoints(verts);
-    return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+    const useNodeMaterial = typeof scene.getMaterialMode === 'function' && scene.getMaterialMode() === 'node';
+    const material = useNodeMaterial
+      ? new (MeshPhysicalNodeMaterial as any)({
+          color,
+          side: THREE.DoubleSide,
+          roughness: 0.95,
+          metalness: 0.0,
+          envMapIntensity: 0.85
+        })
+      : new THREE.MeshPhysicalMaterial({
+          color,
+          side: THREE.DoubleSide,
+          roughness: 0.95,
+          metalness: 0.0,
+          envMapIntensity: 0.85
+        });
+    return new THREE.Mesh(geometry, material);
   }
 
   function buildFiller(edge, height: number, side: THREE.Side, color: number) {
@@ -193,7 +241,23 @@ export var Edge = function (scene, edge, controls) {
     ];
     var shape = new THREE.Shape(points);
     var geometry = new THREE.ShapeGeometry(shape);
-    var filler = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color, side }));
+    const useNodeMaterial = typeof scene.getMaterialMode === 'function' && scene.getMaterialMode() === 'node';
+    const material = useNodeMaterial
+      ? new (MeshPhysicalNodeMaterial as any)({
+          color,
+          side,
+          roughness: 0.95,
+          metalness: 0.0,
+          envMapIntensity: 0.85
+        })
+      : new THREE.MeshPhysicalMaterial({
+          color,
+          side,
+          roughness: 0.95,
+          metalness: 0.0,
+          envMapIntensity: 0.85
+        });
+    var filler = new THREE.Mesh(geometry, material);
     filler.rotation.set(Math.PI / 2, 0, 0);
     filler.position.y = height;
     return filler;

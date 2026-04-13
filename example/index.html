@@ -121,6 +121,8 @@
             <div id="main-controls">
               <a href="#" class="btn btn-default btn-sm" id="new" @click="newDesign">New Plan</a>
               <a href="#" class="btn btn-default btn-sm" id="saveFile" @click="saveDesign">Save Plan</a>
+              <a href="#" class="btn btn-default btn-sm" id="undo" :class="{ disabled: !canUndo }" @click="undoChange">Undo</a>
+              <a href="#" class="btn btn-default btn-sm" id="redo" :class="{ disabled: !canRedo }" @click="redoChange">Redo</a>
               <label class="btn btn-sm btn-default btn-file">
                 <input type="file" class="hidden-input" id="loadFile" @change="loadDesign">
                 Load Plan
@@ -159,6 +161,7 @@
             <div id="loading-modal" :style="{ display: loadingItems > 0 ? 'block' : 'none' }">
               <h1>Loading...</h1>
             </div>
+            <canvas id="worker-three-canvas"></canvas>
           </div>
 
           <div
