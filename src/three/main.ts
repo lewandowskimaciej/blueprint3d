@@ -276,6 +276,14 @@ export var Main = function (model, element, canvasElement, opts) {
       renderer.render(scene.getScene(), camera);
       renderer.clearDepth();
       renderer.render(hud.getScene(), camera);
+    } else if (!renderer) {
+      // If we are relying on worker thread for rendering, we still MUST update
+      // matrix world on the main thread so that Raycaster/DragControls can function.
+      if (shouldRender()) {
+        scene.getScene().updateMatrixWorld(true);
+        camera.updateMatrixWorld();
+        hud.getScene().updateMatrixWorld(true);
+      }
     } else {
       shouldRender();
     }

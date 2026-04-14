@@ -7,21 +7,7 @@ function hasDocumentEnvironment(): boolean {
   return typeof document !== 'undefined' && typeof document.createElementNS === 'function';
 }
 
-function resolveTextureUrlForWorker(url: string): string {
-  if (/^(https?:|data:|blob:)/i.test(url) || url.startsWith('//')) {
-    return url;
-  }
-
-  var normalized = url.replace(/\\/g, '/');
-  if (normalized.startsWith('/')) {
-    return normalized;
-  }
-
-  // In dedicated workers relative URLs resolve from the worker script location
-  // (e.g. /assets/scene.worker-*.js), which breaks app-relative asset paths.
-  // Resolve against origin root to keep compatibility with existing content URLs.
-  return `/${normalized}`;
-}
+import { resolveTextureUrlForWorker } from './path_utils';
 
 var placeholderImage: ImageBitmap | null = null;
 
@@ -30,8 +16,17 @@ function getPlaceholderImage(): ImageBitmap | null {
     return placeholderImage;
   }
   if (typeof OffscreenCanvas !== 'undefined') {
-    var canvas = new OffscreenCanvas(1, 1);
-    placeholderImage = canvas.transferToImageBitmap();
+    try {
+      var canvas = new OffscreenCanvas(1, 1);
+      // A rendering context must be acquired before transferToImageBitmap()
+      // can be called; without it the browser throws InvalidStateError.
+      var ctx = canvas.getContext('2d');
+      if (ctx) {
+        placeholderImage = canvas.transferToImageBitmap();
+      }
+    } catch (_) {
+      // Placeholder is optional — texture will update when the fetch resolves.
+    }
   }
   return placeholderImage;
 }

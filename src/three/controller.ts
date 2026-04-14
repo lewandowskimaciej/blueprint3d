@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import { Utils } from '../core/utils';
 import { Callbacks } from '../core/callbacks';
+import { DragControls } from 'three/addons/controls/DragControls.js';
 
 export var Controller = function (three, model, camera, element, controls, hud) {
   var scope = this;
 
   this.enabled = true;
   this.itemTransformCompletedCallbacks = new Callbacks();
+  this.itemTransformingCallbacks = new Callbacks();
 
   var scene = model.scene;
   var plane: THREE.Mesh;
@@ -14,6 +16,7 @@ export var Controller = function (three, model, camera, element, controls, hud) 
   var intersectedObject;
   var mouseoverObject;
   var selectedObject;
+  var dragControls: DragControls;
 
   var mouseDown = false;
   var mouseMoved = false;
@@ -36,9 +39,74 @@ export var Controller = function (three, model, camera, element, controls, hud) 
     element.addEventListener('mouseup', mouseUpEvent);
     element.addEventListener('mousemove', mouseMoveEvent);
     mouse = new THREE.Vector2();
+
+    dragControls = new DragControls([], camera, element);
+    dragControls.transformGroup = true;
+    dragControls.addEventListener('dragstart', (event) => {
+      if (scope.enabled && event.object) {
+        scope.setSelectedObject(event.object);
+        switchState(states.DRAGGING);
+        controls.enabled = false;
+        three.setCursorStyle("move");
+      }
+    });
+
+    dragControls.addEventListener('drag', (event) => {
+      if (scope.enabled && event.object) {
+        // Floor constraint: keep items grounded at Y=0 during horizontal drag.
+        // Some items like WallItems might have different behavior, but for standard items Y=0 is default.
+        if ((event.object as any).isItem) {
+           event.object.position.y = 0;
+        }
+        hud.update();
+        scope.needsUpdate = true;
+        scope.itemTransformingCallbacks.fire(event.object);
+      }
+    });
+
+    dragControls.addEventListener('dragend', (event) => {
+      if (scope.enabled && event.object) {
+        switchState(states.SELECTED);
+        controls.enabled = true;
+        three.setCursorStyle("pointer");
+        scope.itemTransformCompletedCallbacks.fire(event.object);
+      }
+    });
+
+    dragControls.addEventListener('hoveron', (event) => {
+      if (scope.enabled && event.object) {
+        mouseoverObject = event.object;
+        if (state === states.UNSELECTED || state === states.SELECTED) {
+           three.setCursorStyle("pointer");
+        }
+      }
+    });
+
+    dragControls.addEventListener('hoveroff', () => {
+       if (scope.enabled) {
+         mouseoverObject = null;
+         if (state === states.UNSELECTED || state === states.SELECTED) {
+            three.setCursorStyle("auto");
+         }
+       }
+    });
+
     scene.itemRemovedCallbacks.add(itemRemoved);
     scene.itemLoadedCallbacks.add(itemLoaded);
     setGroundPlane();
+    updateDragControlsObjects();
+  }
+
+  function updateDragControlsObjects() {
+     if (dragControls) {
+        // DragControls expects a mutable array and we update it via .objects
+        const target = dragControls.objects;
+        target.length = 0;
+        const items = model.scene.getItems();
+        for (let i = 0; i < items.length; i++) {
+           target.push(items[i]);
+        }
+     }
   }
 
   function itemLoaded(item) {
@@ -46,14 +114,16 @@ export var Controller = function (three, model, camera, element, controls, hud) 
       return;
     }
     if (!item.position_set) {
+      var center = model.floorplan.getCenter();
+      item.position.x = center.x;
+      item.position.z = center.z;
+      item.position.y = 0;
       scope.setSelectedObject(item);
-      switchState(states.DRAGGING);
-      var pos = item.position.clone();
-      pos.y = 0;
-      var vec = three.projectVector(pos);
-      clickPressed(vec);
+      switchState(states.SELECTED);
+      scope.itemTransformCompletedCallbacks.fire(item);
     }
     item.position_set = true;
+    updateDragControlsObjects();
   }
 
   function clickPressed(vec2?) {
@@ -68,6 +138,7 @@ export var Controller = function (three, model, camera, element, controls, hud) 
     if (intersection) {
       if (scope.isRotating()) selectedObject.rotate(intersection);
       else selectedObject.clickDragged(intersection);
+      scope.itemTransformingCallbacks.fire(selectedObject);
     }
   }
 
@@ -77,6 +148,7 @@ export var Controller = function (three, model, camera, element, controls, hud) 
       selectedObject.mouseOff();
       scope.setSelectedObject(null);
     }
+    updateDragControlsObjects();
   }
 
   function setGroundPlane() {
@@ -119,7 +191,6 @@ export var Controller = function (three, model, camera, element, controls, hud) 
         case states.SELECTED:
           updateMouseover();
           break;
-        case states.DRAGGING:
         case states.ROTATING:
         case states.ROTATING_FREE:
           clickDragged();
@@ -145,13 +216,11 @@ export var Controller = function (three, model, camera, element, controls, hud) 
             switchState(states.ROTATING);
           } else if (intersectedObject != null) {
             scope.setSelectedObject(intersectedObject);
-            if (!intersectedObject.fixed) switchState(states.DRAGGING);
           }
           break;
         case states.UNSELECTED:
           if (intersectedObject != null) {
             scope.setSelectedObject(intersectedObject);
-            if (!intersectedObject.fixed) switchState(states.DRAGGING);
           }
           break;
         case states.ROTATING_FREE:
@@ -238,20 +307,29 @@ export var Controller = function (three, model, camera, element, controls, hud) 
         rotateMouseOver = true;
         hud.setMouseover(true);
         intersectedObject = null;
+        updateDragControlsObjects();
         return;
       }
     }
     rotateMouseOver = false;
     hud.setMouseover(false);
     var items = model.scene.getItems();
-    var intersects = scope.getIntersections(mouse, items, false, true);
-    intersectedObject = intersects.length > 0 ? intersects[0].object : null;
+    var intersects = scope.getIntersections(mouse, items, false, true, true);
+    intersectedObject = null;
+    if (intersects.length > 0) {
+      var obj = intersects[0].object;
+      while (obj && !obj.isItem) {
+        obj = obj.parent;
+      }
+      intersectedObject = obj || null;
+    }
+    updateDragControlsObjects();
   }
 
   function normalizeVector2(vec2) {
     var retVec = new THREE.Vector2();
-    retVec.x = ((vec2.x - three.widthMargin) / (window.innerWidth - three.widthMargin)) * 2 - 1;
-    retVec.y = -((vec2.y - three.heightMargin) / (window.innerHeight - three.heightMargin)) * 2 + 1;
+    retVec.x = ((vec2.x - three.widthMargin) / three.elementWidth) * 2 - 1;
+    retVec.y = -((vec2.y - three.heightMargin) / three.elementHeight) * 2 + 1;
     return retVec;
   }
 

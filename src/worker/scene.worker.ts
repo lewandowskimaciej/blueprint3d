@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { WebGPURenderer } from 'three/webgpu';
 import { Callbacks } from '../core/callbacks';
 import { Model } from '../model/model';
 import { Floorplan as ThreeFloorplan } from '../three/floorplan';
@@ -73,8 +72,8 @@ class WorkerSceneRuntime {
   private controlsBridge: { object: THREE.PerspectiveCamera; cameraMovedCallbacks: Callbacks } = null;
   private floorplanView: any = null;
   private renderLoopHandle: number = null;
+  private rendererMode: 'webgl' | 'webgpu' = 'webgl';
   private history = new SerializedHistory(250);
-  private rendererMode: 'webgpu' | 'webgl' = 'webgl';
 
   private ensureInitialized() {
     if (!this.model || !this.camera || !this.renderer || !this.controlsBridge) {
@@ -91,7 +90,7 @@ class WorkerSceneRuntime {
     this.renderer = await this.createRenderer(payload.canvas);
     this.configureRendererDefaults(this.renderer);
     if ((this.model.scene as any).setMaterialMode) {
-      (this.model.scene as any).setMaterialMode(this.rendererMode === 'webgpu' ? 'node' : 'classic');
+      (this.model.scene as any).setMaterialMode('classic');
     }
 
     this.controlsBridge = {
@@ -413,14 +412,6 @@ class WorkerSceneRuntime {
     this.model.scene.needsUpdate = true;
   }
 
-  private hasWebGPUSupport() {
-    return (
-      typeof navigator !== 'undefined' &&
-      !!(navigator as any).gpu &&
-      typeof (globalThis as any).GPUCanvasContext !== 'undefined'
-    );
-  }
-
   private configureRendererDefaults(targetRenderer: any) {
     targetRenderer.autoClear = false;
     targetRenderer.shadowMap.enabled = true;
@@ -433,32 +424,22 @@ class WorkerSceneRuntime {
     }
   }
 
-  private async createRenderer(canvas: OffscreenCanvas): Promise<THREE.WebGLRenderer | any> {
-    const rendererOptions: any = {
+  private async createRenderer(canvas: OffscreenCanvas): Promise<THREE.WebGLRenderer> {
+    // Always use WebGL inside the worker.
+    //
+    // Attempting WebGPU in a worker and then falling back to WebGL on the
+    // same OffscreenCanvas is unsafe: if WebGPU init fails, the browser
+    // leaves the canvas in a broken state and any subsequent call to
+    // transferToImageBitmap() (made internally by Three.js / WebGLRenderer)
+    // throws "Cannot transfer an ImageBitmap from an OffscreenCanvas with no
+    // context".  The main thread already has its own WebGPU→WebGL fallback
+    // path, so the worker simply uses WebGL directly.
+    this.rendererMode = 'webgl';
+    return new THREE.WebGLRenderer({
       canvas,
       antialias: true,
       preserveDrawingBuffer: true
-    };
-
-    if (this.hasWebGPUSupport()) {
-      try {
-        const webgpuRenderer: any = new WebGPURenderer(rendererOptions);
-        if (typeof webgpuRenderer.init === 'function') {
-          await webgpuRenderer.init();
-        }
-        this.rendererMode = 'webgpu';
-        return webgpuRenderer;
-      } catch (error) {
-        post({
-          kind: 'event',
-          type: 'log',
-          payload: { message: 'WebGPU renderer unavailable in worker, falling back to WebGL.', error: String(error) }
-        });
-      }
-    }
-
-    this.rendererMode = 'webgl';
-    return new THREE.WebGLRenderer(rendererOptions);
+    });
   }
 }
 

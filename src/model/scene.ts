@@ -3,6 +3,7 @@ import { MeshPhysicalNodeMaterial } from 'three/webgpu';
 import { Callbacks } from '../core/callbacks';
 import { Utils } from '../core/utils';
 import { loadTextureCompat } from '../core/texture_loader';
+import { resolveTextureUrlForWorker } from '../core/path_utils';
 import { Factory } from '../items/factory';
 
 type MaterialMode = 'classic' | 'node';
@@ -118,13 +119,14 @@ export class Scene {
 
     this.itemLoadingCallbacks.fire();
 
+    var itemUrl = resolveTextureUrlForWorker(fileName);
     var fileLoader = new THREE.FileLoader();
-    fileLoader.load(fileName, (fileData: string) => {
+    fileLoader.load(itemUrl, (fileData: string) => {
       try {
         var json = scope.parseModelJson(fileData, fileName);
         var parsed: { geometry: THREE.BufferGeometry, material: THREE.Material | THREE.Material[] };
 
-        if (scope.isLegacyGeometryFormat(json)) {
+        if (json && scope.isLegacyGeometryFormat(json)) {
           parsed = {
             geometry: scope.parseLegacyGeometry(json),
             material: scope.createLegacyMaterials(json.materials || [], fileName)
@@ -152,7 +154,7 @@ export class Scene {
         scope.itemLoadedCallbacks.fire(null);
       }
     }, undefined, (error) => {
-      console.error(`Failed to load model "${fileName}"`, error);
+      console.error(`Failed to load model "${fileName}" from "${itemUrl}"`, error);
       scope.itemLoadedCallbacks.fire(null);
     });
   }
@@ -162,18 +164,26 @@ export class Scene {
       throw new Error(`Model "${fileName}" returned non-text payload`);
     }
 
-    var directCandidate = fileData.replace(/^\uFEFF/, '').trim();
+    var clean = fileData.replace(/^\uFEFF/, '').trim();
+    if (clean.startsWith('<')) {
+       throw new Error(`Model "${fileName}" returned HTML instead of JSON. This usually indicates a 404 error or a path resolution issue.`);
+    }
+
     try {
-      return JSON.parse(directCandidate);
+      return JSON.parse(clean);
     } catch (directError) {
-      var firstBrace = directCandidate.indexOf('{');
-      var lastBrace = directCandidate.lastIndexOf('}');
+      var firstBrace = clean.indexOf('{');
+      var lastBrace = clean.lastIndexOf('}');
       if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
         throw directError;
       }
 
-      var extractedJson = directCandidate.slice(firstBrace, lastBrace + 1);
-      return JSON.parse(extractedJson);
+      var extractedJson = clean.slice(firstBrace, lastBrace + 1);
+      try {
+         return JSON.parse(extractedJson);
+      } catch (_) {
+         throw directError;
+      }
     }
   }
 
@@ -190,7 +200,6 @@ export class Scene {
 
   private parseObjectFormat(json: any): { geometry: THREE.BufferGeometry, material: THREE.Material | THREE.Material[] } {
     var object = new THREE.ObjectLoader().parse(json);
-
     var geometry: THREE.BufferGeometry = null;
     var materials: THREE.Material[] = [];
     object.traverse((child) => {

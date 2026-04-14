@@ -8,6 +8,11 @@ import { Metadata } from './metadata';
  */
 export abstract class Item extends THREE.Mesh {
 
+  public isGroup = true;
+
+  /** */
+  public isItem = true;
+  
   /** */
   private scene: any;
 
@@ -110,6 +115,7 @@ export abstract class Item extends THREE.Mesh {
   public override remove(...objects: THREE.Object3D[]): this {
     if (objects.length > 0) return super.remove(...objects);
     this.scene.removeItem(this);
+    return this;
   }
 
   /** */

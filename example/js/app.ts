@@ -434,6 +434,15 @@ createApp({
       recordLocalFallbackSnapshot(true);
     };
 
+    const onItemTransforming = (item: any) => {
+      const itemIndex = getItemIndex(item);
+      if (itemIndex >= 0) {
+        // Real-time synchronization during drag/rotate.
+        // We set recordHistory to false to avoid bloating the undo/redo stack.
+        void sendWorkerSceneCommand(buildItemTransformCommand(item, itemIndex), false);
+      }
+    };
+
     const onFloorplanEditCompleted = () => {
       if (applyingHistory) {
         return;
@@ -779,6 +788,7 @@ createApp({
       bp.three.nothingClicked.add(resetTextures);
       bp.three.controls.cameraMovedCallbacks.add(scheduleCameraSync);
       controller.itemTransformCompletedCallbacks.add(onItemTransformCompleted);
+      controller.itemTransformingCallbacks.add(onItemTransforming);
 
       bp.floorplanner.getModeResetCallbacks().add((mode: number) => {
         floorplannerMode.value = mode;
@@ -893,6 +903,7 @@ createApp({
         bp.three.nothingClicked.remove(resetTextures);
         bp.three.controls.cameraMovedCallbacks.remove(scheduleCameraSync);
         controller.itemTransformCompletedCallbacks.remove(onItemTransformCompleted);
+        controller.itemTransformingCallbacks.remove(onItemTransforming);
         bp.floorplanner.getChangeCallbacks().remove(onFloorplanEditCompleted);
         (bp.model.scene as any).itemLoadingCallbacks.remove(onItemLoading);
         (bp.model.scene as any).itemLoadedCallbacks.remove(onItemLoaded);
